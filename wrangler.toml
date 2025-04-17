@@ -1,0 +1,8 @@
+
+name = "event-payload-tracker"
+main = "src/index.ts"
+compatibility_date = "2025-04-01"
+
+[[pipelines]]
+pipeline = "my-clickstream-pipeline"
+binding = "PIPELINE"

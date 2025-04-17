@@ -1,0 +1,13 @@
+
+{
+  "name": "event-payload-tracker",
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler publish"
+  },
+  "devDependencies": {
+    "wrangler": "^3.47.0"
+  }
+}
