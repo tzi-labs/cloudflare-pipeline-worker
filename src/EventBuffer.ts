@@ -1,5 +1,16 @@
 import type { DurableObjectState } from "@cloudflare/workers-types";
 
+// Define the specific interface for the Pipeline binding
+interface PipelineBinding {
+  send(data: Array<any>): Promise<void>; // Pipeline expects an array of objects
+}
+
+// Define the expected Env structure for the Durable Object
+interface Env {
+  PIPELINE: PipelineBinding;
+  // Add other bindings if necessary
+}
+
 export class EventBuffer {
     state: DurableObjectState;
     env: Env;
