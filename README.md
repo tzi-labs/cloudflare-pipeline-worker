@@ -22,22 +22,19 @@ npx wrangler r2 bucket create my-bucket
 
 Save the bucket name for the next step.
 
-### 2. Create a Pipeline
+### 2. Create or Update a Pipeline
 
-To create a pipeline using Wrangler, run the following command in a terminal, and specify:
+If creating a new pipeline, use `create`. If updating an existing one, use `update`.
+Specify your pipeline name and the target R2 bucket.
 
-*   The name of your pipeline
-*   The name of the R2 bucket you created in step 1
+**Example Update Command:**
+Use this command to set the R2 bucket, batching parameters (max 300 seconds), and enable gzip compression:
 
 ```bash
-npx wrangler pipelines create my-clickstream-pipeline --r2-bucket my-bucket --batch-max-seconds 5 --compression none
+npx wrangler pipelines update my-clickstream-pipeline --r2-bucket pipeline-test-1 --batch-max-seconds 300   --batch-max-mb 100   --batch-max-rows 10000000 --compression gzip
 ```
 
-After running this command, you will be prompted to authorize Cloudflare Workers Pipelines to create an R2 API token on your behalf. These tokens are used by your pipeline when loading data into your bucket. You can approve the request through the browser link which will open automatically.
-
-**Choosing a pipeline name:**
-
-You will notice two optional flags are set while creating the pipeline: `--batch-max-seconds` and `--compression`. These flags are added to make it faster for you to see the output of your first pipeline. For production use cases, we recommend keeping the default settings.
+After running this command, you may be prompted to authorize Cloudflare Workers Pipelines to access your R2 bucket.
 
 Once you create your pipeline, you will receive a summary of your pipeline's configuration, as well as an HTTP endpoint which you can post data to:
 
@@ -97,7 +94,41 @@ You can continue posting data to the pipeline. The pipeline will automatically b
 
 ### 4. Verify in R2
 
-Open the [R2 dashboard](https://dash.cloudflare.com/?to=/:account/r2) ↗, and navigate to the R2 bucket you created in step 1. You will see a directory, labeled with today's date (such as `event_date=2025-04-05`). Click on the directory, and you'll see a sub-directory with the current hour (such as `hr=04`). You should see a newline delimited JSON file, containing the data you posted in step 3. Download the file, and open it in a text editor of your choice, to verify that the data posted in step 3 is present.
+Open the [R2 dashboard](https://dash.cloudflare.com/?to=/:account/r2) ↗, and navigate to the R2 bucket you created in step 1. You will see a directory, labeled with today's date (such as `event_date=2025-04-05`). Click on the directory, and you'll see a sub-directory with the current hour (such as `hr=04`). You should see files (e.g., `.json.gz` if compression is enabled) containing the data posted in step 3. Download a file, decompress if necessary, and open it in a text editor to verify that the data posted in step 3 is present.
+
+## Alternative: In-Worker Batching with Durable Objects
+
+This project also includes an `EventBuffer` Durable Object (DO) which provides an alternative batching mechanism *within* the Worker itself, before data is even sent to the Cloudflare Pipeline service.
+
+**How it works:**
+
+*   When enabled, incoming requests are routed to a single instance of the `EventBuffer` DO.
+*   The DO collects events in an internal buffer (`this.buffer`).
+*   It sends the accumulated batch to the Cloudflare Pipeline service (`env.PIPELINE.send(batch)`) only when either:
+    *   The number of buffered events reaches `MAX_BATCH_SIZE` (currently 1000 in `src/EventBuffer.ts`).
+    *   A flush timer (`FLUSH_INTERVAL`, currently 5 minutes) expires.
+    *   A size limit check prevents the buffer stored in DO Storage from exceeding ~120KB (to stay under the 128KB limit per value in DO storage).
+
+**Benefits:**
+
+*   Can reduce the number of `send` calls to the Pipeline service, potentially lowering costs if those calls are billed.
+*   Allows for batching logic independent of the Pipeline service's own batching rules.
+
+**Limitations:**
+
+*   **DO Storage Limit:** The buffer is periodically saved to DO storage. Cloudflare Durable Objects have a limit of 128 KiB per key-value pair. The code attempts to flush the buffer *before* saving if adding a new event would exceed ~120 KiB, but extremely large individual events could still pose a challenge.
+*   **Single Instance:** This implementation uses a single DO instance (`idFromName("global-event-buffer")`). High traffic volumes might overwhelm a single DO instance.
+
+**How to Enable/Disable:**
+
+*   The behavior is controlled by the `USE_DURABLE_OBJECT` variable in `wrangler.toml`:
+    ```toml
+    [vars]
+    USE_DURABLE_OBJECT = true  # Set to true to use DO batching, false to send directly
+    ```
+*   Set to `true` to use the Durable Object batching.
+*   Set to `false` (the current default) to bypass the DO and send data from each request directly to the Pipeline service (the Pipeline service will still batch based on its own settings before writing to R2).
+*   Remember to redeploy (`npx wrangler deploy`) after changing this value.
 
 ## Next steps
 

@@ -27,3 +27,6 @@ new_classes = ["EventBuffer"]
 
 # Ensure script_name points to the DO script if needed, or confirm main worker makes it accessible
 # Depending on setup, DO bindings might need slightly different structure, check latest wrangler docs if issues persist
+
+[vars]
+USE_DURABLE_OBJECT = false
