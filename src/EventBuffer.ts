@@ -1,10 +1,10 @@
 export class EventBuffer {
   buffer: any[] = []
   lastFlush = Date.now()
-  MAX_BUFFER = 500 // Reverted to original value
-  FLUSH_INTERVAL = 1000 * 60 * 60 // 1 hour - Reverted to original value
+  MAX_BUFFER = 500
+  FLUSH_INTERVAL = 1000 * 30 // Changed to 30 seconds for testing
 
-  constructor(readonly state: DurableObjectState, readonly env: any) {
+  constructor(readonly state: DurableObjectState, readonly env: { PIPELINE: any, R2_BUCKET?: any }) {
     // We don't await this promise, allowing the constructor to return immediately.
     // The flush operation will happen in the background.
     this.scheduleFlushIfNeeded()
@@ -22,61 +22,66 @@ export class EventBuffer {
   async fetch(request: Request): Promise<Response> {
     // Assuming the worker forwarded the request after validating JSON
     try {
-        const data = await request.json();
+        // Clone the request to read the body, as it can only be read once
+        const data = await request.clone().json(); // Clone before reading body
         this.buffer.push(data);
         console.log(`Buffered event. Buffer size: ${this.buffer.length}`);
 
         if (this.buffer.length >= this.MAX_BUFFER) {
-            console.log("Buffer limit reached, flushing...");
-            await this.flushToR2();
+            console.log("Buffer limit reached, flushing to pipeline...");
+            // Don't await flush here in the fetch path to respond quickly
+            this.state.waitUntil(this.flushToPipeline());
         }
 
+        // Consider returning 202 Accepted as buffering is asynchronous
         return new Response("Buffered", { status: 202 });
     } catch (e) {
         console.error("Error processing fetch in DO:", e);
-        return new Response("Internal Server Error in DO", { status: 500 })
+        // Avoid exposing internal errors directly
+        return new Response("Error buffering event", { status: 500 })
     }
   }
 
   // alarm() is invoked by the runtime when a scheduled alarm is due
   async alarm() {
-    console.log("Alarm triggered, flushing...");
-    await this.flushToR2();
-    // Schedule the next alarm after the current one has run
+    console.log("Alarm triggered, flushing buffer to pipeline...");
+    await this.flushToPipeline(); // Await flush in alarm handler
+    // Schedule the next alarm *after* the current one has successfully run (or attempted)
     this.state.storage.setAlarm(Date.now() + this.FLUSH_INTERVAL);
     console.log("Next alarm scheduled.");
   }
 
-  async flushToR2() {
+  // Renamed from flushToR2
+  async flushToPipeline() {
     if (this.buffer.length === 0) {
-        console.log("Buffer empty, nothing to flush.");
+        console.log("Buffer empty, nothing to flush to pipeline.");
         return;
     }
 
-    const now = new Date();
-    // Use UTC time for consistency, format as YYYY-MM-DD/HH
-    const year = now.getUTCFullYear();
-    const month = (now.getUTCMonth() + 1).toString().padStart(2, '0'); // Month is 0-indexed
-    const day = now.getUTCDate().toString().padStart(2, '0');
-    const hour = now.getUTCHours().toString().padStart(2, '0');
-
-    const key = `events/${year}-${month}-${day}/${hour}.ndjson`; // hourly partition
-    const body = this.buffer.map(e => JSON.stringify(e)).join('\n');
+    // Reference the buffer to send.
+    const batchToSend = [...this.buffer]; // Shallow copy the current buffer contents
 
     try {
-        await this.env.R2_BUCKET.put(key, body, {
-            httpMetadata: { contentType: 'application/x-ndjson' } // Set content type
-        });
-        console.log(`Flushed ${this.buffer.length} events to R2 key: ${key}`);
+        if (!this.env.PIPELINE) {
+            console.error("PIPELINE binding missing in Durable Object environment.");
+            // Consider how to handle this - maybe retry later?
+            return; // Stop if pipeline isn't bound
+        }
 
-        // Clear the buffer *after* successful upload
-        this.buffer = [];
-        this.lastFlush = Date.now(); // Update last flush time (optional)
+        // Pipelines API expects an array of events
+        await this.env.PIPELINE.send(batchToSend);
+
+        console.log(`Successfully flushed ${batchToSend.length} events to pipeline.`);
+        // Clear the buffer ONLY after successful send
+        // Remove the elements that were successfully sent
+        this.buffer.splice(0, batchToSend.length);
+        this.lastFlush = Date.now(); // Update last flush time
 
     } catch (error) {
-        console.error(`Failed to flush events to R2: ${error}`);
-        // Optional: Implement retry logic or error handling here
-        // Consider *not* clearing the buffer if the put fails, to retry later.
+        console.error(`Failed to flush batch of size ${batchToSend.length} events to pipeline: ${error}`);
+        // DO NOT clear the buffer here. The events remain in this.buffer for the next attempt.
+        // Optional: Implement more sophisticated retry logic (e.g., exponential backoff)
+        // or dead-letter queue if sends consistently fail.
     }
   }
 }

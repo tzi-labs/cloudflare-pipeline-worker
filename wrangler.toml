@@ -2,18 +2,28 @@ name = "event-payload-tracker"
 main = "src/index.ts"
 compatibility_date = "2025-04-01"
 
-[[pipelines]]
-pipeline = "my-clickstream-pipeline"
-binding = "PIPELINE"
-
 [[durable_objects.bindings]]
 name = "EVENT_BUFFER"
 class_name = "EventBuffer"
 
-[[r2_buckets]]
-binding = "R2_BUCKET"
-bucket_name = "test-do-log-batcher"
+# Add the service binding for the main worker
+# This binding should be inherited by the DO instances created by this worker
+[[pipelines]]
+pipeline = "my-clickstream-pipeline"
+binding = "PIPELINE"
 
 [[migrations]]
 tag = "v1-add-eventbuffer-do" # A unique tag for this migration
 new_classes = ["EventBuffer"]
+
+# Removed the explicit [[workers.bindings]] block for the service
+# # Bind the pipeline service to the Durable Object class
+# [[workers.bindings]]
+# pipelines = [
+#   { binding = "PIPELINE", service = "my-clickstream-pipeline" }
+# ]
+# [workers.bindings.durable_objects]
+# class_names = ["EventBuffer"]
+
+# Ensure script_name points to the DO script if needed, or confirm main worker makes it accessible
+# Depending on setup, DO bindings might need slightly different structure, check latest wrangler docs if issues persist
