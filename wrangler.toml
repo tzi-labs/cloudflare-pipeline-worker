@@ -1,4 +1,3 @@
-
 name = "event-payload-tracker"
 main = "src/index.ts"
 compatibility_date = "2025-04-01"
@@ -6,3 +5,15 @@ compatibility_date = "2025-04-01"
 [[pipelines]]
 pipeline = "my-clickstream-pipeline"
 binding = "PIPELINE"
+
+[[durable_objects.bindings]]
+name = "EVENT_BUFFER"
+class_name = "EventBuffer"
+
+[[r2_buckets]]
+binding = "R2_BUCKET"
+bucket_name = "test-do-log-batcher"
+
+[[migrations]]
+tag = "v1-add-eventbuffer-do" # A unique tag for this migration
+new_classes = ["EventBuffer"]

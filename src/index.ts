@@ -1,3 +1,5 @@
+import { EventBuffer } from './EventBuffer';
+
 export default {
   async fetch(request: Request, env: any, ctx: any): Promise<Response> {
     // Dynamically allow any origin sending credentials
@@ -50,6 +52,9 @@ export default {
   }
 }
 
+// Export the Durable Object class
+export { EventBuffer };
+
 function handleOptions(request: Request, corsHeaders: Headers, originPresent: boolean): Response {
   // Only add CORS headers if an Origin header was present in the request
   if (!originPresent) {
@@ -85,8 +90,21 @@ async function handlePost(request: Request, env: any): Promise<Response> {
 
     // Consider adding more specific validation based on expected data types/formats
 
-    // Send data to the pipeline
-    await env.PIPELINE.send([data])
+    // Forward data to the Durable Object
+    const key = `buffer-${data.uid}` // Partition by user ID (or use hourly, etc.)
+    const id = env.EVENT_BUFFER.idFromName(key)
+    const stub = env.EVENT_BUFFER.get(id)
+
+    // We need to clone the original request to forward it, including its body
+    // Note: If you need to *modify* the data before sending, create a new Request object
+    const forwardRequest = new Request(request.url, {
+      method: "POST",
+      headers: request.headers, // Forward original headers
+      body: JSON.stringify(data) // Reserialize the validated data
+    })
+
+    // Forward the request to the DO
+    await stub.fetch(forwardRequest)
 
     // Return successful response (CORS headers added in the main fetch handler if Origin was present)
     return new Response("OK", { status: 200 })
