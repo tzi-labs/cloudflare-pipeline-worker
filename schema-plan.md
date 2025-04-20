@@ -412,6 +412,7 @@ Absolutely — here's the **full JSON Schema definition** for each of the remain
   "$id": "event_log.json",
   "type": "object",
   "properties": {
+    "uuid": { "type": "string", "format": "uuid" },
     "site_id": { "type": "string" },
     "user_id": { "type": "string" },
     "event": { "type": "string" },
@@ -442,7 +443,7 @@ Absolutely — here's the **full JSON Schema definition** for each of the remain
     },
     "user_agent": { "type": "string" }
   },
-  "required": ["site_id", "user_id", "event", "url", "timestamp"]
+  "required": ["uuid", "site_id", "user_id", "event", "url", "timestamp"]
 }
 ```
 
@@ -455,6 +456,7 @@ Absolutely — here's the **full JSON Schema definition** for each of the remain
   "$id": "page_view.json",
   "type": "object",
   "properties": {
+    "uuid": { "type": "string", "format": "uuid" },
     "event": { "type": "string", "enum": ["pageview", "pageclose"] },
     "site_id": { "type": "string" },
     "user_id": { "type": "string" },
@@ -471,7 +473,7 @@ Absolutely — here's the **full JSON Schema definition** for each of the remain
     "timezone_offset": { "type": "integer" },
     "source_detail": { "type": "string" }
   },
-  "required": ["event", "site_id", "user_id", "url", "timestamp"]
+  "required": ["uuid", "event", "site_id", "user_id", "url", "timestamp"]
 }
 ```
 
@@ -484,6 +486,7 @@ Absolutely — here's the **full JSON Schema definition** for each of the remain
   "$id": "click_action.json",
   "type": "object",
   "properties": {
+    "uuid": { "type": "string", "format": "uuid" },
     "event": { "type": "string", "const": "generic_click" },
     "site_id": { "type": "string" },
     "user_id": { "type": "string" },
@@ -520,7 +523,7 @@ Absolutely — here's the **full JSON Schema definition** for each of the remain
       }
     }
   },
-  "required": ["event", "site_id", "user_id", "timestamp", "url", "element", "interaction_type"]
+  "required": ["uuid", "event", "site_id", "user_id", "timestamp", "url", "element", "interaction_type"]
 }
 ```
 
@@ -533,6 +536,7 @@ Absolutely — here's the **full JSON Schema definition** for each of the remain
   "$id": "session.json",
   "type": "object",
   "properties": {
+    "uuid": { "type": "string", "format": "uuid" },
     "session_id": { "type": "string" },
     "user_id": { "type": "string" },
     "started_at": { "type": "number" },
@@ -544,7 +548,7 @@ Absolutely — here's the **full JSON Schema definition** for each of the remain
     "source_detail": { "type": "string" },
     "engagement_score": { "type": "number" }
   },
-  "required": ["session_id", "user_id", "started_at"]
+  "required": ["uuid", "session_id", "user_id", "started_at"]
 }
 ```
 
@@ -557,6 +561,7 @@ Absolutely — here's the **full JSON Schema definition** for each of the remain
   "$id": "scroll_event.json",
   "type": "object",
   "properties": {
+    "uuid": { "type": "string", "format": "uuid" },
     "user_id": { "type": "string" },
     "session_id": { "type": "string" },
     "post_id": { "type": "string" },
@@ -565,7 +570,7 @@ Absolutely — here's the **full JSON Schema definition** for each of the remain
     "duration_visible": { "type": "number" },
     "dwell_time": { "type": "number" }
   },
-  "required": ["user_id", "session_id", "post_id"]
+  "required": ["uuid", "user_id", "session_id", "post_id"]
 }
 ```
 
@@ -578,6 +583,7 @@ Absolutely — here's the **full JSON Schema definition** for each of the remain
   "$id": "media_interaction.json",
   "type": "object",
   "properties": {
+    "uuid": { "type": "string", "format": "uuid" },
     "user_id": { "type": "string" },
     "post_id": { "type": "string" },
     "session_id": { "type": "string" },
@@ -585,7 +591,7 @@ Absolutely — here's the **full JSON Schema definition** for each of the remain
     "action": { "type": "string", "enum": ["play", "pause", "seek", "complete", "next_step"] },
     "timestamp": { "type": "number" }
   },
-  "required": ["user_id", "post_id", "type", "action", "timestamp"]
+  "required": ["uuid", "user_id", "post_id", "type", "action", "timestamp"]
 }
 ```
 
@@ -598,6 +604,7 @@ Absolutely — here's the **full JSON Schema definition** for each of the remain
   "$id": "chat_message.json",
   "type": "object",
   "properties": {
+    "uuid": { "type": "string", "format": "uuid" },
     "session_id": { "type": "string" },
     "user_id": { "type": "string" },
     "role": { "type": "string", "enum": ["user", "assistant", "system"] },
@@ -608,7 +615,7 @@ Absolutely — here's the **full JSON Schema definition** for each of the remain
       "items": { "type": "string" }
     }
   },
-  "required": ["session_id", "role", "message", "timestamp"]
+  "required": ["uuid", "session_id", "role", "message", "timestamp"]
 }
 ```
 
@@ -627,5 +634,43 @@ Absolutely — here's the **full JSON Schema definition** for each of the remain
   - Build `googletag.pubads().setTargeting(...)` dynamically
 - Feed API will return ranked list of `feed_item`s using `post` or `ad` data
 - Frontend will use schema to render card UI, handle scroll, click, and impression tracking
+
+---
+
+## 📊 ML Training Parameters
+
+### Content Prediction Features
+
+```json
+{
+  "content_engagement_metrics": {
+    "type": "object",
+    "properties": {
+      "was_clicked": { "type": "boolean" },
+      "time_on_page": { "type": "number" },
+      "scroll_depth": { "type": "number" },
+      "video_completion_rate": { "type": "number" },
+      "comment_count": { "type": "integer" },
+      "save_count": { "type": "integer" },
+      "share_count": { "type": "integer" }
+    }
+  },
+  "content_features": {
+    "type": "object",
+    "properties": {
+      "categories": { "type": "array", "items": { "type": "string" } },
+      "tags": { "type": "array", "items": { "type": "string" } },
+      "publish_date": { "type": "string", "format": "date-time" },
+      "content_length": { "type": "integer" },
+      "has_video": { "type": "boolean" },
+      "recipe_difficulty": { "type": "string", "enum": ["easy", "medium", "hard"] },
+      "total_time": { "type": "integer" },
+      "ingredient_count": { "type": "integer" }
+    }
+  }
+}
+```
+
+These parameters will be used for training ML models to predict content engagement and personalize the user experience.
 
 ---
